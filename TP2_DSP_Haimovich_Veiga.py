@@ -5,6 +5,7 @@
 import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
+import librosa
 
 fs=48000
 
@@ -44,20 +45,26 @@ plt.ylabel("Amplitud")
 
 
 # Ventaneo las funciones para identificar los niveles donde solo hay ruido
-def mediaMovilD(x, M):
+def mediamovildr(x,M):
     if len(x)<M:
         raise Exception('La ventana no debe tener más muestras que la señal a filtrar')
-    y = np.zeros(len(x))
-    for i in range(M//2, len(x) - M//2):
-        y[i] = 0.0
-        for j in range(-M//2, M//2 + 1):
-            y[i] += x[i+j]
-        y[i] = y[i] / M
-    return y
+    if len(x)>M:
+        y = np.zeros(len(x))
+        acc=0.0
+        for i in range(0,M):
+            acc += x[i]
+        y[M//2] = acc/M
+        for i in range((M//2)+1,(len(y)-(M//2))):
+            acc = acc + x[i+((M-1)//2)]-x[i-(((M-1)//2)+1)]
+            y[i] = acc/M
+        return y
+    else:
+        s=len(x)-M
+        return np.hstack([np.zeros(M-1),np.mean(x[s:s+M-1])])
 
-ventaneo1 = mediaMovilD(signal1,25000)
-ventaneo2 = mediaMovilD(signal2,25000)
-ventaneo3 = mediaMovilD(signal3,25000)
+ventaneo1 = mediamovildr(signal1,25000)
+ventaneo2 = mediamovildr(signal2,25000)
+ventaneo3 = mediamovildr(signal3,25000)
 
 plt.figure(2, figsize=(25,15))
 plt.grid()
@@ -79,7 +86,21 @@ plt.plot(t1, ventaneo1)
 #                 ste[i] += ( ((y)**2) / M )   
 #     return ste
 
-# energia1 = shortTimeEnergy(2400,signal1,100)
+energia1 = librosa.feature.rms(signal1,2400,100)
+
+print(energia1)
+plt.figure(3, figsize=(25,15))
+plt.grid()
+plt.plot(np.linspace(0,len(signal1)//fs,len(energia1[0])), energia1[0])
+
+zeros1 = librosa.feature.zero_crossing_rate(signal1,2400,100)
+
+signal1_noise = []
+
+print(zeros1)
+plt.figure(3, figsize=(25,15))
+plt.grid()
+plt.plot(np.linspace(0,len(signal1)//fs,len(zeros1[0])), zeros1[0])
 
 #%%
 
