@@ -6,6 +6,7 @@ import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
 from scipy.fft import fft, ifft
+import librosa
 
 fs=48000
 
@@ -128,21 +129,21 @@ signal_1_sustraida = np.real(ifft(signal1_umbral))
 #                 ste[i] += ( ((y)**2) / M )   
 #     return ste
 
-# energia1 = librosa.feature.rms(signal1,2400,100)
+energia1 = librosa.feature.rms(signal1,2400,100)
 
-# print(energia1)
-# plt.figure(3, figsize=(25,15))
-# plt.grid()
-# plt.plot(np.linspace(0,len(signal1)//fs,len(energia1[0])), energia1[0])
+print(energia1)
+plt.figure(3, figsize=(25,15))
+plt.grid()
+plt.plot(np.linspace(0,len(signal1)//fs,len(energia1[0])), energia1[0])
 
-# zeros1 = librosa.feature.zero_crossing_rate(signal1,2400,100)
+zeros1 = librosa.feature.zero_crossing_rate(signal1,2400,100)
 
-# signal1_noise = []
+signal1_noise = []
 
-# print(zeros1)
-# plt.figure(3, figsize=(25,15))
-# plt.grid()
-# plt.plot(np.linspace(0,len(signal1)//fs,len(zeros1[0])), zeros1[0])
+print(zeros1)
+plt.figure(3, figsize=(25,15))
+plt.grid()
+plt.plot(np.linspace(0,len(signal1)//fs,len(zeros1[0])), zeros1[0])
 
 #%%
 
