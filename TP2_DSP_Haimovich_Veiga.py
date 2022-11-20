@@ -5,7 +5,7 @@
 import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
-import librosa
+from scipy.fft import fft, ifft
 
 fs=48000
 
@@ -44,18 +44,19 @@ plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
 
-# Ventaneo las funciones para identificar los niveles donde solo hay ruido
+# Ventaneo las funciones con una Hanning para identificar los niveles donde solo hay ruido
 def mediamovildr(x,M):
     if len(x)<M:
         raise Exception('La ventana no debe tener más muestras que la señal a filtrar')
     if len(x)>M:
         y = np.zeros(len(x))
         acc=0.0
+        w = np.hamming(M)
         for i in range(0,M):
-            acc += x[i]
+            acc += x[i] * w[i]
         y[M//2] = acc/M
         for i in range((M//2)+1,(len(y)-(M//2))):
-            acc = acc + x[i+((M-1)//2)]-x[i-(((M-1)//2)+1)]
+            acc = acc + x[i+((M-1)//2)] - x[i-(((M-1)//2)+1)]
             y[i] = acc/M
         return y
     else:
@@ -69,6 +70,47 @@ ventaneo3 = mediamovildr(signal3,25000)
 plt.figure(2, figsize=(25,15))
 plt.grid()
 plt.plot(t1, ventaneo1)
+
+#Para realizar la resta espectral tengo que obtener la transformada de la magnitud de la señal original ventaneada y el promedio espectral del ruido
+
+#Obtengo la magnitud de la transformada de la señal ruidosa original, y la ventaneo
+signal1_f = abs(fft(signal1))
+signal1_f_window = mediamovildr(signal1_f,25000)
+#Obtengo la fase de la transformada de la señal ruidosa original
+signal1_f_phase = np.angle(fft(signal1))
+
+#Defino un vector de ruido, eligiendo los primeros 5 seg de la muestra donde hay solo ruido
+noise1=np.array(signal1[0:int(5*fs)])
+
+#Calculo el promedio espectral del ruido "mu"
+mu1=np.mean(fft(noise1))
+
+#Hago la resta espectral utilizando el rectificador de media onda
+clean_signal = []
+for i in range(0,len(signal1_f_window)):
+    if signal1_f_window[i] - mu1 < 0:
+        clean_signal1=0
+    else:
+        clean_signal1=signal1_f_window - mu1
+print(clean_signal1)
+
+#Sumo todas las filas de clean_signal
+signal1_sin_ruido = np.sum(clean_signal1,axis=0)
+
+#Multiplico la fase de la señal original a la señal limpia
+signal1_sin_ruido = signal1_sin_ruido * np.exp(1j*signal1_f_phase)
+
+#Definir detector de voz con umbral de -12 dB
+signal1_umbral = [] 
+for i in range(0, len(signal1_sin_ruido)):
+    if signal1_sin_ruido[i] < 12:
+        signal1_umbral = 0
+    else:
+        signal1_umbral = signal1_sin_ruido[i]
+
+#Antitransformo la señal con parte del ruido sustraído
+signal_1_sustraida = np.real(ifft(signal1_umbral))
+
 
 
 # Importo funcion short time energy
@@ -86,21 +128,21 @@ plt.plot(t1, ventaneo1)
 #                 ste[i] += ( ((y)**2) / M )   
 #     return ste
 
-energia1 = librosa.feature.rms(signal1,2400,100)
+# energia1 = librosa.feature.rms(signal1,2400,100)
 
-print(energia1)
-plt.figure(3, figsize=(25,15))
-plt.grid()
-plt.plot(np.linspace(0,len(signal1)//fs,len(energia1[0])), energia1[0])
+# print(energia1)
+# plt.figure(3, figsize=(25,15))
+# plt.grid()
+# plt.plot(np.linspace(0,len(signal1)//fs,len(energia1[0])), energia1[0])
 
-zeros1 = librosa.feature.zero_crossing_rate(signal1,2400,100)
+# zeros1 = librosa.feature.zero_crossing_rate(signal1,2400,100)
 
-signal1_noise = []
+# signal1_noise = []
 
-print(zeros1)
-plt.figure(3, figsize=(25,15))
-plt.grid()
-plt.plot(np.linspace(0,len(signal1)//fs,len(zeros1[0])), zeros1[0])
+# print(zeros1)
+# plt.figure(3, figsize=(25,15))
+# plt.grid()
+# plt.plot(np.linspace(0,len(signal1)//fs,len(zeros1[0])), zeros1[0])
 
 #%%
 
