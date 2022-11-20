@@ -70,22 +70,6 @@ plt.figure(2, figsize=(25,15))
 plt.grid()
 plt.plot(t1, ventaneo1)
 
-
-# Importo funcion short time energy
-# def shortTimeEnergy(M,x,hop):
-#     if len(x) < (hop-M):
-#         raise Exception('El salto entre frames no debe tener más muestras que la señal a filtrar menos la ventana de cada frame')
-#     if len(x)<M:
-#         raise Exception('La ventana no debe tener más muestras que la señal a filtrar')
-#     ste = np.zeros((len(x)-M)//hop)
-#     w = np.hamming(M)
-#     for i in range(0,((len(x)-M)//hop)):
-#         for j in range(0,M):
-#             if (j+(i*hop)) < ((len(x)-M+1)):
-#                 y = x[j+(i*hop)] * w[j]
-#                 ste[i] += ( ((y)**2) / M )   
-#     return ste
-
 energia1 = librosa.feature.rms(signal1,2400,100)
 
 print(energia1)
