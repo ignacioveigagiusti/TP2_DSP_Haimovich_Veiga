@@ -230,13 +230,13 @@ def noiseReductionMBSS(x,M,hop,bands):
     # ventaneo cada FFT separando en 64 bandas con superposición del 50%
     x_window_f_bands = np.zeros((len(x_window),(M//(M//(bands)))-1,M//(bands//2)))
     for i in range(len(x_window_f)):
-        x_window_f_bands[i] = windowing(M//32, x_window_f[i], M//64)
+        x_window_f_bands[i] = windowing((M//(bands//2)), x_window_f[i], M//bands)
     # 
-    S_i = np.zeros((len(x_window_f_bands),(M//(M//64))-1,M//32), dtype='complex_')
+    S_i = np.zeros((len(x_window_f_bands),(M//(M//bands))-1,M//(bands//2)), dtype='complex_')
     for i in range(0,len(x_window_f_bands)):
-        for j in range (0,(M//(M//64)-1)):
-            for k in range(M//32):
-                S_i[i][j][k] = x_window_f_bands[i][j][k]**2 - (alpha_i(x_window_f_bands[i][j], mu)*delta_i((fs/len(x_window_f[i]))*(j+1)*(M//32), fs)*mu**2)
+        for j in range (0,(M//(M//bands)-1)):
+            for k in range(M//(bands//2)):
+                S_i[i][j][k] = x_window_f_bands[i][j][k]**2 - (alpha_i(x_window_f_bands[i][j], mu)*delta_i((fs/len(x_window_f[i]))*(j+1)*(M//(bands//2)), fs)*mu**2)
     
     # Atenuación cuando no hay voz.
     # T_per_frame = np.zeros(len(x_window_f))
@@ -249,11 +249,11 @@ def noiseReductionMBSS(x,M,hop,bands):
     x_sin_ruido = np.zeros(len(x))
 
     for i in range(0,len(x_window_f_bands)):
-        S_k = np.zeros(M)
-        for k in range(0,(M//(M//64))-1):
-            for l in range(0,M//32):
-                if((k*(M//64)+l)<M):
-                    S_k[k*(M//64)+l] += S_i[i][k][l]
+        S_k = np.zeros(M, dtype='complex_')
+        for k in range(0,(M//(M//bands))-1):
+            for l in range(0,M//(bands//2)):
+                if((k*(M//bands)+l)<M):
+                    S_k[k*(M//bands)+l] += S_i[i][k][l]
         S_i_m = ifft(S_k* np.exp(1j*x_window_phase[i]))
         for j in range(0,M):
             x_sin_ruido[i*hop+j] += S_i_m[j]
