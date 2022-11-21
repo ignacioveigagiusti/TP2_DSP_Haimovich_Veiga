@@ -187,27 +187,34 @@ plt.title("Vega con ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
-#Para realizar la resta espectral tengo que obtener la transformada de la magnitud de la señal original ventaneada y el promedio espectral del ruido
-
-def windowing(M,x,hop):
-    if len(x) < (hop-M):
-        raise Exception('El salto entre frames no debe tener más muestras que la señal a filtrar menos la ventana de cada frame')
-    if len(x)<M:
-        raise Exception('La ventana no debe tener más muestras que la señal a filtrar')
-    w = np.hanning(M)
-
-    # Creo vector que contendrá a cada frame
-    windowedFrames = np.zeros(((len(x)//hop)-1,M))
-
-    for i in range(0,(int((len(x)-M)//hop))):
-        windowedFrames[i] = x[(i*hop):(i*hop+M)] * w
-    
-    return windowedFrames
-
 M= 1536
 hop = 768
 
-def noiseReductionMBSS(x,M,hop):
+def SNR(x,mu):
+    x_p = np.mean(x)**2
+    mu_p = mu**2
+    SNR = (x_p-mu_p)/mu_p
+    return SNR
+
+def alpha_i(x,mu):
+    if SNR(x,mu)<-5:
+        return 4.75
+    if SNR(x,mu)>-5:
+        if SNR(x,mu)<20:
+            return (3/20)*SNR(x,mu)
+        else:
+            return 1
+
+def delta_i(f,fs):
+    if f<1000:
+        return 1
+    if f>1000:
+        if f<((fs//2)-2000):
+            return 2.5
+        else:
+            return 1.5
+
+def noiseReductionMBSS(x,M,hop,bands):
     # Ventaneo de señal
     x_window = windowing(M,x,hop)
     # FFT de cada ventana
@@ -220,16 +227,16 @@ def noiseReductionMBSS(x,M,hop):
     noise=np.array(x[0:int(5*fs)])
     #Calculo el promedio espectral del ruido "mu"
     mu=np.mean(abs(fft(noise)))
-    # Rectificación de media onda
-    S_i = np.zeros((len(x_window),M), dtype='complex_')
-    for i in range(0,len(x_window)):
-        X_i = fft(x_window[i])
-        for j in range(0,len(X_i)):
-            if X_i[j] == 0:
-                X_i[j]=0.01
-        H = 1 - (mu/abs(X_i))
-        H_r = (H+abs(H))/2
-        S_i[i] = H_r*X_i
+    # ventaneo cada FFT separando en 64 bandas con superposición del 50%
+    x_window_f_bands = np.zeros((len(x_window),(M//(M//(bands)))-1,M//(bands//2)))
+    for i in range(len(x_window_f)):
+        x_window_f_bands[i] = windowing(M//32, x_window_f[i], M//64)
+    # 
+    S_i = np.zeros((len(x_window_f_bands),(M//(M//64))-1,M//32), dtype='complex_')
+    for i in range(0,len(x_window_f_bands)):
+        for j in range (0,(M//(M//64)-1)):
+            for k in range(M//32):
+                S_i[i][j][k] = x_window_f_bands[i][j][k]**2 - (alpha_i(x_window_f_bands[i][j], mu)*delta_i((fs/len(x_window_f[i]))*(j+1)*(M//32), fs)*mu**2)
     
     # Atenuación cuando no hay voz.
     # T_per_frame = np.zeros(len(x_window_f))
@@ -241,8 +248,13 @@ def noiseReductionMBSS(x,M,hop):
 
     x_sin_ruido = np.zeros(len(x))
 
-    for i in range(0,len(x_window_f)):
-        S_i_m = ifft(S_i[i]* np.exp(1j*x_window_phase[i]))
+    for i in range(0,len(x_window_f_bands)):
+        S_k = np.zeros(M)
+        for k in range(0,(M//(M//64))-1):
+            for l in range(0,M//32):
+                if((k*(M//64)+l)<M):
+                    S_k[k*(M//64)+l] += S_i[i][k][l]
+        S_i_m = ifft(S_k* np.exp(1j*x_window_phase[i]))
         for j in range(0,M):
             x_sin_ruido[i*hop+j] += S_i_m[j]
 
@@ -250,11 +262,11 @@ def noiseReductionMBSS(x,M,hop):
 
 #Antitransformo la señal con parte del ruido sustraído
 
-signal1_boll = noiseReductionBoll(signal1,1536,768)
+signal1_MBSS = noiseReductionMBSS(signal1,1536,768,64)
 
-signal2_boll = noiseReductionBoll(signal2,1536,768)
+signal2_MBSS = noiseReductionMBSS(signal2,1536,768,64)
 
-signal3_boll = noiseReductionBoll(signal3,1536,768)
+signal3_MBSS = noiseReductionMBSS(signal3,1536,768,64)
 
 plt.figure(2, figsize=(25,15))
 plt.subplot(3,1,1)
@@ -278,9 +290,9 @@ plt.title("Vega sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
-sf.write('signal1_MBSS.wav',signal1_boll,fs)
-sf.write('signal2_MBSS.wav',signal2_boll,fs)
-sf.write('signal3_MBSS.wav',signal3_boll,fs)
+sf.write('signal1_MBSS.wav',signal1_MBSS,fs)
+sf.write('signal2_MBSS.wav',signal2_MBSS,fs)
+sf.write('signal3_MBSS.wav',signal3_MBSS,fs)
 
 
 #%%
@@ -320,15 +332,13 @@ for i in range(0,len(signal1_VA)):
     else:
         if noiseRanges[nOfRanges][1] - noiseRanges[nOfRanges][0] > longestRange:
             longestRange = nOfRanges
-            print(longestRange)
         nOfRanges += 1
         noiseRanges.append([i,i])
-        print(print(noiseRanges[longestRange]))
 
 print(noiseRanges)
 
 print(longestRange)
-print(print(noiseRanges[longestRange]))
+print(noiseRanges[longestRange])
 
 plt.figure(3, figsize=(25,15))
 plt.grid()
