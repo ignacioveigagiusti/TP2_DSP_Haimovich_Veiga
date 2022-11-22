@@ -1,5 +1,6 @@
 #%%
-#Criterio de Boll
+
+# Resta Espectral Boll
 
 #Importo librerias
 import numpy as np
@@ -17,9 +18,9 @@ signal3, fs = sf.read('VegaHiNoise.wav')
 
 #Grafico las señales con ruido en funcion del tiempo
 
-signal1 = signal1[:,0] #Magia para que se grafique una sola señal
-signal2 = signal2[:,0] #Magia para que se grafique una sola señal
-signal3 = signal3[:,0] #Magia para que se grafique una sola señal
+signal1 = signal1[:,0] 
+signal2 = signal2[:,0] 
+signal3 = signal3[:,0] 
 
 t1=np.linspace(0, len(signal1)//fs,len(signal1))
 plt.figure(1, figsize=(25,15))
@@ -44,93 +45,52 @@ plt.title("Vega con ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
-#Para realizar la resta espectral tengo que obtener la transformada de la magnitud de la señal original ventaneada y el promedio espectral del ruido
-
-def windowing(M,x,hop):
-    if len(x) < (hop-M):
-        raise Exception('El salto entre frames no debe tener más muestras que la señal a filtrar menos la ventana de cada frame')
-    if len(x)<M:
-        raise Exception('La ventana no debe tener más muestras que la señal a filtrar')
-    w = np.hanning(M)
-
-    # Creo vector que contendrá a cada frame
-    windowedFrames = np.zeros(((len(x)//hop)-1,M))
-
-    for i in range(0,(int((len(x)-M)//hop))):
-        windowedFrames[i] = x[(i*hop):(i*hop+M)] * w
-    
-    return windowedFrames
-
-M= 1536
-hop = 768
-
-def noiseReductionBoll(x,M,hop):
-    # Ventaneo de señal
-    x_window = windowing(M,x,hop)
-    # FFT de cada ventana
-    x_window_f = np.zeros((len(x_window),M), dtype='complex_')
-    x_window_phase = np.zeros((len(x_window),M), dtype='complex_')
-    for i in range(0,len(x_window)):
-        x_window_f[i] = fft(x_window[i])
-        x_window_phase[i] = np.angle(x_window_f[i])
-    #Defino un vector de ruido, eligiendo los primeros 5 seg de la muestra donde hay solo ruido
+def spectralSubtraction(x,M,hop):
+    # STFT de x
+    Y = librosa.stft(x)
+    # Extracción de Magnitud y Fase
+    Y_abs = np.abs(Y)
+    Y_phase = np.angle(Y)
+    # Selección de rango de la señal que contenga sólo ruido
     noise=np.array(x[0:int(5*fs)])
-    #Calculo el promedio espectral del ruido "mu"
+    # Promedio espectral del ruido (mu)
     mu=np.mean(abs(fft(noise)))
+    # Estimador de la magnitud de la señal original
+    S_squared = Y_abs**2 - mu**2
     # Rectificación de media onda
-    S_i = np.zeros((len(x_window),M), dtype='complex_')
-    for i in range(0,len(x_window)):
-        X_i = fft(x_window[i])
-        for j in range(0,len(X_i)):
-            if X_i[j] == 0:
-                X_i[j]=0.01
-        H = 1 - (mu/abs(X_i))
-        H_r = (H+abs(H))/2
-        S_i[i] = H_r*X_i
-    
-    # Atenuación cuando no hay voz.
-    # T_per_frame = np.zeros(len(x_window_f))
-    # for i in range(0,len(x_window_f)):
-    #     T_per_frame[i] = 20 * np.log10((1/(M*mu))*np.sum(abs(S_i[i])))
-    #     c = 10**(-30/20)
-    #     if T_per_frame[i] < -12:
-    #         S_i[i] = c*fft(x_window[i])
+    for i in range(len(S_squared)):
+        for j in range(len(S_squared[i])):
+            if S_squared[i][j]<0:
+                S_squared[i][j]=0
+    # Incorporación de fase y transformada inversa
+    S_f = np.sqrt(S_squared)*np.exp(1j*Y_phase)
+    noiseless_s = librosa.istft(S_f)
+    return noiseless_s
 
-    x_sin_ruido = np.zeros(len(x))
+signal1_boll = spectralSubtraction(signal1,1536,768)
 
-    for i in range(0,len(x_window_f)):
-        S_i_m = ifft(S_i[i]* np.exp(1j*x_window_phase[i]))
-        for j in range(0,M):
-            x_sin_ruido[i*hop+j] += S_i_m[j]
+signal2_boll = spectralSubtraction(signal2,1536,768)
 
-    return x_sin_ruido
-
-#Antitransformo la señal con parte del ruido sustraído
-
-signal1_boll = noiseReductionBoll(signal1,1536,768)
-
-signal2_boll = noiseReductionBoll(signal2,1536,768)
-
-signal3_boll = noiseReductionBoll(signal3,1536,768)
+signal3_boll = spectralSubtraction(signal3,1536,768)
 
 plt.figure(2, figsize=(25,15))
 plt.subplot(3,1,1)
 plt.grid()
-plt.plot(t1, signal1_boll)
+plt.plot(t1[:len(signal1_boll)], signal1_boll)
 plt.title("Clarinete sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
 plt.subplot(3,1,2)
 plt.grid()
-plt.plot(t1, signal2_boll)
+plt.plot(t1[:len(signal2_boll)], signal2_boll)
 plt.title("Glock sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
 plt.subplot(3,1,3)
 plt.grid()
-plt.plot(t1, signal3_boll)
+plt.plot(t1[:len(signal3_boll)], signal3_boll)
 plt.title("Vega sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
@@ -138,7 +98,6 @@ plt.ylabel("Amplitud")
 sf.write('signal1_boll.wav',signal1_boll,fs)
 sf.write('signal2_boll.wav',signal2_boll,fs)
 sf.write('signal3_boll.wav',signal3_boll,fs)
-
 
 #%%
 
@@ -158,47 +117,22 @@ signal1, fs = sf.read('ClarinetHiNoise.wav')
 signal2, fs = sf.read('GlockHiNoise.wav')
 signal3, fs = sf.read('VegaHiNoise.wav')
 
-#Grafico las señales con ruido en funcion del tiempo
-
-signal1 = signal1[:,0] #Magia para que se grafique una sola señal
-signal2 = signal2[:,0] #Magia para que se grafique una sola señal
-signal3 = signal3[:,0] #Magia para que se grafique una sola señal
+# Se toma 1 sólo canal
+signal1 = signal1[:,0] 
+signal2 = signal2[:,0] 
+signal3 = signal3[:,0] 
 
 t1=np.linspace(0, len(signal1)//fs,len(signal1))
-plt.figure(1, figsize=(25,15))
-plt.subplot(3,1,1)
-plt.grid()
-plt.plot(t1, signal1)
-plt.title("Clarinete con ruido")
-plt.xlabel("Tiempo")
-plt.ylabel("Amplitud")
-
-plt.subplot(3,1,2)
-plt.grid()
-plt.plot(t1, signal2)
-plt.title("Glock con ruido")
-plt.xlabel("Tiempo")
-plt.ylabel("Amplitud")
-
-plt.subplot(3,1,3)
-plt.grid()
-plt.plot(t1, signal3)
-plt.title("Vega con ruido")
-plt.xlabel("Tiempo")
-plt.ylabel("Amplitud")
-
-M= 1536
-hop = 768
 
 def SNR(x,mu):
     x_p = np.mean(x)**2
     mu_p = mu**2
-    SNR = (x_p-mu_p)/mu_p
+    SNR = (x_p)/mu_p
     return SNR
 
 def alpha_i(x,mu):
     if SNR(x,mu)<-5:
-        return 4.75
+        return 5
     if SNR(x,mu)>-5:
         if SNR(x,mu)<20:
             return (3/20)*SNR(x,mu)
@@ -207,85 +141,65 @@ def alpha_i(x,mu):
 
 def delta_i(f,fs):
     if f<1000:
-        return 1
+        return 0.8
     if f>1000:
         if f<((fs//2)-2000):
-            return 2.5
+            return 1.3
         else:
-            return 1.5
+            return 1
 
-def noiseReductionMBSS(x,M,hop,bands):
-    # Ventaneo de señal
-    x_window = windowing(M,x,hop)
-    # FFT de cada ventana
-    x_window_f = np.zeros((len(x_window),M), dtype='complex_')
-    x_window_phase = np.zeros((len(x_window),M), dtype='complex_')
-    for i in range(0,len(x_window)):
-        x_window_f[i] = fft(x_window[i])
-        x_window_phase[i] = np.angle(x_window_f[i])
-    #Defino un vector de ruido, eligiendo los primeros 5 seg de la muestra donde hay solo ruido
+def MBSS(x,M,hop,bands):
+    # STFT de x
+    Y = librosa.stft(x)
+    # Extracción de Magnitud y Fase
+    Y_abs = np.abs(Y)
+    Y_phase = np.angle(Y)
+    # Selección de rango de la señal que contenga sólo ruido
     noise=np.array(x[0:int(5*fs)])
-    #Calculo el promedio espectral del ruido "mu"
+    # Promedio espectral del ruido (mu)
     mu=np.mean(abs(fft(noise)))
-    # ventaneo cada FFT separando en 64 bandas con superposición del 50%
-    x_window_f_bands = np.zeros((len(x_window),(M//(M//(bands)))-1,M//(bands//2)))
-    for i in range(len(x_window_f)):
-        x_window_f_bands[i] = windowing((M//(bands//2)), x_window_f[i], M//bands)
-    # 
-    S_i = np.zeros((len(x_window_f_bands),(M//(M//bands))-1,M//(bands//2)), dtype='complex_')
-    for i in range(0,len(x_window_f_bands)):
-        for j in range (0,(M//(M//bands)-1)):
-            for k in range(M//(bands//2)):
-                S_i[i][j][k] = x_window_f_bands[i][j][k]**2 - (alpha_i(x_window_f_bands[i][j], mu)*delta_i((fs/len(x_window_f[i]))*(j+1)*(M//(bands//2)), fs)*mu**2)
-    
-    # Atenuación cuando no hay voz.
-    # T_per_frame = np.zeros(len(x_window_f))
-    # for i in range(0,len(x_window_f)):
-    #     T_per_frame[i] = 20 * np.log10((1/(M*mu))*np.sum(abs(S_i[i])))
-    #     c = 10**(-30/20)
-    #     if T_per_frame[i] < -12:
-    #         S_i[i] = c*fft(x_window[i])
+    # Defino el parámetro de piso espectral Beta
+    beta = 0.02
+    # Estimador de la magnitud de la señal original calculado por bandas
+    S_squared = np.zeros_like(Y)
+    for i in range(bands):
+        for j in range(len(Y[0])):
+            for k in range(i*(len(Y)//bands),(i+1)*(len(Y)//bands)):
+                Y_p = Y[k][j]**2
+                alpha = alpha_i(Y[i*(len(Y)//bands):(i+1)*(len(Y)//bands),j], mu)
+                delta = delta_i((fs/len(Y))*(i+1)*(len(Y)//bands), fs)
+                S_squared[k][j] = Y_p - (alpha*delta*(mu**2))
+                if (S_squared[k][j]) < (beta*Y_p):
+                    S_squared[k][j]=beta*(Y_p)
+    # Incorporación de fase y transformada inversa
+    S_f = np.sqrt(S_squared)*np.exp(1j*Y_phase)
+    noiseless_s = librosa.istft(S_f)
+    return noiseless_s
 
-    x_sin_ruido = np.zeros(len(x))
+signal1_MBSS = MBSS(signal1,1536,768,4)
 
-    for i in range(0,len(x_window_f_bands)):
-        S_k = np.zeros(M, dtype='complex_')
-        for k in range(0,(M//(M//bands))-1):
-            for l in range(0,M//(bands//2)):
-                if((k*(M//bands)+l)<M):
-                    S_k[k*(M//bands)+l] += S_i[i][k][l]
-        S_i_m = ifft(S_k* np.exp(1j*x_window_phase[i]))
-        for j in range(0,M):
-            x_sin_ruido[i*hop+j] += S_i_m[j]
+signal2_MBSS = MBSS(signal2,1536,768,4)
 
-    return x_sin_ruido
-
-#Antitransformo la señal con parte del ruido sustraído
-
-signal1_MBSS = noiseReductionMBSS(signal1,1536,768,64)
-
-signal2_MBSS = noiseReductionMBSS(signal2,1536,768,64)
-
-signal3_MBSS = noiseReductionMBSS(signal3,1536,768,64)
+signal3_MBSS = MBSS(signal3,1536,768,4)
 
 plt.figure(2, figsize=(25,15))
 plt.subplot(3,1,1)
 plt.grid()
-plt.plot(t1, signal1_boll)
+plt.plot(t1[:len(signal1_MBSS)], signal1_MBSS)
 plt.title("Clarinete sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
 plt.subplot(3,1,2)
 plt.grid()
-plt.plot(t1, signal2_boll)
+plt.plot(t1[:len(signal2_MBSS)], signal2_MBSS)
 plt.title("Glock sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
 
 plt.subplot(3,1,3)
 plt.grid()
-plt.plot(t1, signal3_boll)
+plt.plot(t1[:len(signal3_MBSS)], signal3_MBSS)
 plt.title("Vega sin ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
@@ -298,21 +212,6 @@ sf.write('signal3_MBSS.wav',signal3_MBSS,fs)
 #%%
 
 # Detección de secciones con ruido.
-
-# Importo funcion short time energy
-# def shortTimeEnergy(M,x,hop):
-#     if len(x) < (hop-M):
-#         raise Exception('El salto entre frames no debe tener más muestras que la señal a filtrar menos la ventana de cada frame')
-#     if len(x)<M:
-#         raise Exception('La ventana no debe tener más muestras que la señal a filtrar')
-#     ste = np.zeros((len(x)-M)//hop)
-#     w = np.hamming(M)
-#     for i in range(0,((len(x)-M)//hop)):
-#         for j in range(0,M):
-#             if (j+(i*hop)) < ((len(x)-M+1)):
-#                 y = x[j+(i*hop)] * w[j]
-#                 ste[i] += ( ((y)**2) / M )   
-#     return ste
 
 energia1 = librosa.feature.rms(signal1,2400,100)
 avgSTE1 = np.mean(energia1)
@@ -330,7 +229,7 @@ for i in range(0,len(signal1_VA)):
     if signal1_VA[i]==1:
        noiseRanges[nOfRanges][1] = i 
     else:
-        if noiseRanges[nOfRanges][1] - noiseRanges[nOfRanges][0] > longestRange:
+        if (noiseRanges[nOfRanges][1] - noiseRanges[nOfRanges][0]) > longestRange:
             longestRange = nOfRanges
         nOfRanges += 1
         noiseRanges.append([i,i])
