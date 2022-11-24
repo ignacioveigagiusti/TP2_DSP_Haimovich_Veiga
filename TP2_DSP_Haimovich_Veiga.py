@@ -23,7 +23,7 @@ signal2 = signal2[:,0]
 signal3 = signal3[:,0] 
 
 t1=np.linspace(0, len(signal1)//fs,len(signal1))
-plt.figure(1, figsize=(25,15))
+plt.figure(1, figsize=(10,7))
 plt.subplot(3,1,1)
 plt.grid()
 plt.plot(t1, signal1)
@@ -44,6 +44,8 @@ plt.plot(t1, signal3)
 plt.title("Vega con ruido")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
+plt.tight_layout()
+plt.show()
 
 # Detección de secciones con ruido.
 def onlyNoiseRangeDetection(x):
@@ -55,7 +57,6 @@ def onlyNoiseRangeDetection(x):
             signal1_VA[i]=1
         else:
             signal1_VA[i]=0
-
     noiseRanges = [[0,0]]
     nOfRanges = 0
     longestRange = 0
@@ -99,7 +100,7 @@ signal2_boll = spectralSubtraction(signal2,1536,768)
 
 signal3_boll = spectralSubtraction(signal3,1536,768)
 
-plt.figure(2, figsize=(25,15))
+plt.figure(2, figsize=(10,7))
 plt.subplot(3,1,1)
 plt.grid()
 plt.plot(t1[:len(signal1_boll)], signal1_boll)
@@ -120,6 +121,8 @@ plt.plot(t1[:len(signal3_boll)], signal3_boll)
 plt.title("Vega sin ruido (Boll)")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
+plt.tight_layout()
+plt.show()
 
 sf.write('Clarinet_boll.wav',signal1_boll,fs)
 sf.write('Glock_boll.wav',signal2_boll,fs)
@@ -183,7 +186,7 @@ def MBSS(x,M,hop,bands):
     # Selección de rango de la señal que contenga sólo ruido
     noise=onlyNoiseRangeDetection(x)
     # Defino el parámetro de piso espectral Beta
-    beta = 0.02
+    beta = 0.01
     # Estimador de la magnitud de la señal original calculado por bandas
     Y_t = Y.transpose()
     S_squared_t = np.zeros_like(Y_t)
@@ -214,7 +217,7 @@ signal2_MBSS = MBSS(signal2,1536,768,4)
 
 signal3_MBSS = MBSS(signal3,1536,768,4)
 
-plt.figure(2, figsize=(25,15))
+plt.figure(2, figsize=(10,7))
 plt.subplot(3,1,1)
 plt.grid()
 plt.plot(t1[:len(signal1_MBSS)], signal1_MBSS)
@@ -235,7 +238,41 @@ plt.plot(t1[:len(signal3_MBSS)], signal3_MBSS)
 plt.title("Vega sin ruido (MBSS)")
 plt.xlabel("Tiempo")
 plt.ylabel("Amplitud")
+plt.tight_layout()
+plt.show()
 
 sf.write('Clarinet_MBSS.wav',signal1_MBSS,fs)
 sf.write('Glock_MBSS.wav',signal2_MBSS,fs)
 sf.write('Vega_MBSS.wav',signal3_MBSS,fs)
+
+#%%
+
+# Estimación de SNRs
+
+def SNR_estimate(noisySignal, noiseSubtractedSignal):
+    mu = np.mean(abs(noiseSubtractedSignal))**2
+    noise = onlyNoiseRangeDetection(noisySignal)
+    sigma = np.std(abs(noise))**2
+    SNR = mu/sigma
+    return SNR
+
+SNR_Boll_Clarinet = SNR_estimate(signal1, signal1_boll)
+SNR_MBSS_Clarinet = SNR_estimate(signal1, signal1_MBSS)
+SNR_Boll_Glock = SNR_estimate(signal2, signal2_boll)
+SNR_MBSS_Glock = SNR_estimate(signal2, signal2_MBSS)
+SNR_Boll_Vega = SNR_estimate(signal3, signal3_boll)
+SNR_MBSS_Vega = SNR_estimate(signal3, signal3_MBSS)
+
+print(SNR_Boll_Clarinet)
+print(SNR_MBSS_Clarinet)
+print(SNR_Boll_Glock)
+print(SNR_MBSS_Glock)
+print(SNR_Boll_Vega)
+print(SNR_MBSS_Vega)
+
+# SNR_Boll_Clarinet = 57.89421936716158
+# SNR_MBSS_Clarinet = 58.363355683136156
+# SNR_Boll_Glock = 10.650011505113806
+# SNR_MBSS_Glock = 10.979366382341569
+# SNR_Boll_Vega = 15.104270107567498
+# SNR_MBSS_Vega = 15.537580503859074
