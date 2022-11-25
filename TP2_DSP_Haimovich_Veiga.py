@@ -49,14 +49,18 @@ plt.show()
 
 # Detección de secciones con ruido.
 def onlyNoiseRangeDetection(x):
+    # STE de la señal
     energia1 = librosa.feature.rms(y=signal1,frame_length=2400,hop_length=100)
+    # Se promedia para tener un punto de referencia para la detección
     avgSTE1 = np.mean(energia1)
+    # Detección de actividad vocal/musical
     signal1_VA = np.zeros(len(energia1[0]))
     for i in range(0,len(energia1[0])):
         if energia1[0][i] < (avgSTE1):
             signal1_VA[i]=1
         else:
             signal1_VA[i]=0
+    # Extracción de rangos sin actividad y búsqueda del rango más largo
     noiseRanges = [[0,0]]
     nOfRanges = 0
     longestRange = 0
@@ -89,6 +93,28 @@ def spectralSubtraction(x,M,hop):
         for j in range(len(S_squared[i])):
             if S_squared[i][j]<0:
                 S_squared[i][j]=0
+    S_half_wave = np.sqrt(S_squared)*np.exp(1j*Y_phase)
+    x_half_wave = librosa.istft(S_half_wave)
+    # Ruido residual
+    noise_res =onlyNoiseRangeDetection(x_half_wave)
+    N_r = np.amax(abs(fft(noise_res)))
+    # Eliminación mediante selección de valores mínimos adyacentes
+    for i in range(len(S_squared)):
+        for j in range(1,len(S_squared[i])-1):
+            if np.sqrt(S_squared[i][j])<N_r:
+                S_squared[i][j]=np.amin([S_squared[i][j-1],S_squared[i][j],S_squared[i][j+1]])
+    S_res = np.sqrt(S_squared)*np.exp(1j*Y_phase)
+    x_res = librosa.istft(S_half_wave)
+    # Ruido residual 2
+    noise_res_2 =onlyNoiseRangeDetection(x_res)
+    mu_res_2 = np.mean(abs(fft(noise_res_2)))
+    # Atenuación aditional en secciones de sólo ruido
+    for i in range(len(S_squared)):
+        if np.sum(S_squared[i])>0:
+            T=20*np.log10((1/(2*np.pi))*np.sum(np.sqrt(S_squared[i])/mu_res_2))
+            if T<-12:
+                c=10**(-30/20)
+                S_squared[i]=c*S_squared[i]
     # Incorporación de fase y transformada inversa
     S_f = np.sqrt(S_squared)*np.exp(1j*Y_phase)
     noiseless_s = librosa.istft(S_f)
@@ -156,6 +182,8 @@ t1=np.linspace(0, len(signal1)//fs,len(signal1))
 def SNR(x,mu):
     x_p = np.mean(abs(x))**2
     mu_p = mu**2
+    if mu_p == 0:
+        return ((x_p)/0.001)
     SNR = ((x_p)/mu_p)
     return SNR
 
@@ -186,7 +214,7 @@ def MBSS(x,M,hop,bands):
     # Selección de rango de la señal que contenga sólo ruido
     noise=onlyNoiseRangeDetection(x)
     # Defino el parámetro de piso espectral Beta
-    beta = 0.01
+    beta = 0.03
     # Estimador de la magnitud de la señal original calculado por bandas
     Y_t = Y.transpose()
     S_squared_t = np.zeros_like(Y_t)
@@ -206,6 +234,28 @@ def MBSS(x,M,hop,bands):
                 if (S_squared_t[i][j+(k*len(band_i)//2)]) < (beta*Y_p):
                     S_squared_t[i][j+(k*len(band_i)//2)] += beta*(Y_p)
     S_squared = S_squared_t.transpose()
+    S_half_wave = np.sqrt(S_squared)*np.exp(1j*Y_phase)
+    x_half_wave = librosa.istft(S_half_wave)
+    # Ruido residual
+    noise_res =onlyNoiseRangeDetection(x_half_wave)
+    N_r = np.amax(abs(fft(noise_res)))
+    # Eliminación mediante selección de valores mínimos adyacentes
+    for i in range(len(S_squared)):
+        for j in range(1,len(S_squared[i])-1):
+            if np.sqrt(S_squared[i][j])<N_r:
+                S_squared[i][j]=np.amin([S_squared[i][j-1],S_squared[i][j],S_squared[i][j+1]])
+    S_res = np.sqrt(S_squared)*np.exp(1j*Y_phase)
+    x_res = librosa.istft(S_half_wave)
+    # Ruido residual 2
+    noise_res_2 =onlyNoiseRangeDetection(x_res)
+    mu_res_2 = np.mean(abs(fft(noise_res_2)))
+    # Atenuación aditional en secciones de sólo ruido
+    for i in range(len(S_squared)):
+        if np.sum(S_squared[i])>0:
+            T=20*np.log10((1/(2*np.pi))*np.sum(np.sqrt(S_squared[i])/mu_res_2))
+            if T<-12:
+                c=10**(-30/20)
+                S_squared[i]=c*S_squared[i]
     # Incorporación de fase y transformada inversa
     S_f = np.sqrt(S_squared)*np.exp(1j*Y_phase)
     noiseless_s = librosa.istft(Y_t.transpose())
